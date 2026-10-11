@@ -6,3 +6,12 @@ boto3>=1.34
 pytest>=8.0
 ruff>=0.6
 scikit-learn>=1.3
+
+# pyarrow is deliberately NOT in sagemaker/requirements.txt: the scikit-learn
+# container already ships it, and reinstalling over the container's own copy risks
+# breaking its entrypoint. Nothing provides it here, though, and the tests read and
+# write Spark part-*.parquet - without it the first parquet test dies with
+# "Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'".
+# Lower-bounded rather than pinned to the container's 25.0.0: the parquet wire
+# format is stable across pyarrow versions, unlike the pandas API surface.
+pyarrow>=14
