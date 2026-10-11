@@ -1,0 +1,28 @@
+[project]
+name = "aws-parking-occupancy-prediction"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["terraform/.build"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I isort, B bugbear, UP pyupgrade, SIM simplify,
+# A builtins shadowing.
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "A"]
+
+[tool.ruff.lint.per-file-ignores]
+# Glue runs on a Spark driver where `sum`, `min` and `max` are pyspark.sql.functions
+# that deliberately shadow the builtins.
+"glue_scripts/*.py" = ["A"]
+# Both of these have to fix sys.path before src.* is importable.
+"sagemaker/train.py" = ["E402"]
+"tests/*.py" = ["A"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,0 +1,8 @@
+-r sagemaker/requirements.txt
+
+# Local and CI only. scikit-learn and boto3 come from the SageMaker container and
+# the Lambda runtime respectively, so they are not in the training requirements.
+boto3>=1.34
+pytest>=8.0
+ruff>=0.6
+scikit-learn>=1.3

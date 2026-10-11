@@ -1,0 +1,16 @@
+# Only the three boosting libraries and pandas are pinned. The SageMaker
+# scikit-learn container already ships numpy, scipy, scikit-learn, pandas and
+# pyarrow, and reinstalling those over the container's own copies can break its
+# entrypoint before train.py ever starts. The rest are lower-bounded so pip
+# leaves a satisfying copy alone.
+catboost==1.2.10
+lightgbm==4.7.0
+xgboost==3.4.1
+
+# Exactly what the container ships, so pip is a no-op there and CI tests the same
+# pandas that production runs. Not "==2.2" (no such release on PyPI) and not
+# "~=2.2" (that resolves to 2.3.x in CI and defeats the point).
+pandas==2.2.3
+
+joblib>=1.3
+PyYAML>=6.0

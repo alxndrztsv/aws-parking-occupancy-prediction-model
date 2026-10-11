@@ -1,0 +1,29 @@
+# Environments
+.venv/
+
+# Secrets: never commit these
+.env
+.env.*
+!.env.example
+*.tfvars
+!*.tfvars.example
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+terraform/.build/
+
+# Sagemaker build output
+sagemaker/*.tar.gz
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Local artifacts
+dist/
+catboost_info/

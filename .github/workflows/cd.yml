@@ -1,0 +1,96 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Run terraform apply (leave off for plan only)"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write # OIDC federation with the bootstrap GitHub provider
+  contents: read
+
+concurrency:
+  group: cd-deploy
+  cancel-in-progress: false
+
+env:
+  # Required variables
+  TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+  TF_VAR_project_name: ${{ vars.TF_PROJECT_NAME }}
+  TF_VAR_environment: ${{ vars.TF_ENVIRONMENT }}
+  TF_VAR_failure_notification_email: ${{ vars.FAILURE_EMAIL }}
+  TF_VAR_api_url: ${{ secrets.API_URL }}
+  TF_VAR_api_city_code: ${{ secrets.API_CITY_CODE }}
+  TF_VAR_api_login: ${{ secrets.API_LOGIN }}
+  TF_VAR_api_password: ${{ secrets.API_PASSWORD }}
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.4"
+
+      - name: terraform init
+        working-directory: terraform
+        run: terraform init -backend-config=backend.hcl -input=false
+
+      # s3.tf names every bucket "${local.prefix}-${layer}", so the artifacts bucket
+      # is derivable without reading state - which matters on the very first run.
+      - name: Resolve artifacts bucket
+        id: bucket
+        run: echo "name=${TF_VAR_project_name}-${TF_VAR_environment}-artifacts" >> "$GITHUB_OUTPUT"
+
+      - name: terraform apply
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply }}
+        working-directory: terraform
+        run: terraform apply -auto-approve -input=false
+
+      - name: Build SageMaker training archive
+        run: bash scripts/build_sagemaker_package.sh dist/train.tar.gz
+
+      # Skipped rather than failed on the first run: the bucket does not exist until
+      # terraform apply above has created it.
+      - name: Upload training archive
+        run: |
+          BUCKET="${{ steps.bucket.outputs.name }}"
+          if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+            aws s3 cp dist/train.tar.gz "s3://$BUCKET/code/train.tar.gz"
+            echo "Uploaded to s3://$BUCKET/code/train.tar.gz"
+          else
+            echo "::warning::$BUCKET does not exist yet. Re-run with apply=true."
+          fi
+
+      - name: terraform plan
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.apply) }}
+        working-directory: terraform
+        run: |
+          terraform plan -input=false -no-color -out=tfplan
+          {
+            echo '### terraform plan'
+            echo '```'
+            terraform show -no-color tfplan
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Show outputs
+        working-directory: terraform
+        run: terraform output -no-color
