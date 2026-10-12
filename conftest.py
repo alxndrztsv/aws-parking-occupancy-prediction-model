@@ -17,3 +17,7 @@ sys.path.insert(0, str(BASE_DIR))
 sys.path.insert(0, str(BASE_DIR / "lambda_functions"))
 
 os.environ.setdefault("AWS_DEFAULT_REGION", "eu-west-1")
+
+# lambda_apply_decision reads its bucket at import time, the way the Lambda
+# runtime provides it, so the value has to exist before the test module is imported.
+os.environ.setdefault("ARTIFACTS_BUCKET", "parking-ml-pipeline-dev-artifacts")

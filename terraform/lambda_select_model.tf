@@ -26,22 +26,29 @@ resource "aws_iam_role_policy" "lambda_select_model_policy" {
         ]
         Resource = "arn:aws:logs:*:*:*"
       },
+      # Reads model_metrics.csv from metrics/ and writes pending.json into
+      # historical_models/ plus an audit copy next to the metrics. It no longer
+      # reads current_models/: promotion moved to lambda_apply_decision.
       {
         Effect = "Allow"
         Action = ["s3:GetObject"]
         Resource = [
-          "${aws_s3_bucket.layers["artifacts"].arn}/metrics/*",
-          "${aws_s3_bucket.layers["artifacts"].arn}/current_models/*",
-          "${aws_s3_bucket.layers["artifacts"].arn}/historical_models/*"
+          "${aws_s3_bucket.layers["artifacts"].arn}/${local.metrics_prefix}*",
+          "${aws_s3_bucket.layers["artifacts"].arn}/${local.historical_models_prefix}*"
         ]
       },
       {
         Effect = "Allow"
         Action = ["s3:PutObject"]
         Resource = [
-          "${aws_s3_bucket.layers["artifacts"].arn}/metrics/*",
-          "${aws_s3_bucket.layers["artifacts"].arn}/historical_models/*"
+          "${aws_s3_bucket.layers["artifacts"].arn}/${local.metrics_prefix}*",
+          "${aws_s3_bucket.layers["artifacts"].arn}/${local.historical_models_prefix}*"
         ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = "sns:Publish"
+        Resource = aws_sns_topic.model_decision.arn
       }
     ]
   })
@@ -66,8 +73,12 @@ resource "aws_lambda_function" "select_model" {
 
   environment {
     variables = {
-      SELECTION_METRIC = var.model_selection_metric
-      HORIZONS_MINUTES = var.horizons_minutes
+      SELECTION_METRIC         = var.model_selection_metric
+      HORIZONS_MINUTES         = var.horizons_minutes
+      PROMOTION_THRESHOLD      = var.model_promotion_min_improvement
+      LINK_TTL_DAYS            = var.model_approval_link_ttl_days
+      MODEL_DECISION_TOPIC_ARN = aws_sns_topic.model_decision.arn
+      APPROVAL_URL             = aws_lambda_function_url.apply_decision.function_url
     }
   }
 

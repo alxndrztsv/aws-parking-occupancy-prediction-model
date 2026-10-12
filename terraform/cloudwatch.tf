@@ -28,3 +28,8 @@ resource "aws_cloudwatch_log_group" "select_model" {
   name              = "/aws/lambda/${local.prefix}-select-model"
   retention_in_days = 365
 }
+
+resource "aws_cloudwatch_log_group" "apply_decision" {
+  name              = "/aws/lambda/${local.prefix}-apply-decision"
+  retention_in_days = 365
+}

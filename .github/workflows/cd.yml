@@ -24,6 +24,7 @@ env:
   TF_VAR_project_name: ${{ vars.TF_PROJECT_NAME }}
   TF_VAR_environment: ${{ vars.TF_ENVIRONMENT }}
   TF_VAR_failure_notification_email: ${{ vars.FAILURE_EMAIL }}
+  TF_VAR_model_approval_email: ${{ vars.MODEL_APPROVAL_EMAIL }}
   TF_VAR_api_url: ${{ secrets.API_URL }}
   TF_VAR_api_city_code: ${{ secrets.API_CITY_CODE }}
   TF_VAR_api_login: ${{ secrets.API_LOGIN }}

@@ -1,13 +1,19 @@
 locals {
   gold_splits_prefix = "s3://${aws_s3_bucket.layers["gold"].id}/splits"
 
+  # Key prefixes inside the artifacts bucket, shared by the lifecycle rules, the
+  # IAM policies and the Lambda code.
+  historical_models_prefix = "historical_models/"
+  current_models_prefix    = "current_models/"
+  metrics_prefix           = "metrics/"
+
   # Uploaded by the CD workflow
   training_code_uri = "s3://${aws_s3_bucket.layers["artifacts"].id}/code/train.tar.gz"
   checkpoints_uri   = "s3://${aws_s3_bucket.layers["artifacts"].id}/checkpoints/"
 
-  # Winners promoted by the SelectModel step. The next training job re-scores these
+  # Winners promoted by the approval Lambda. The next training job re-scores these
   # on its own validation split, which is what makes the comparison valid.
-  historical_models_uri = "s3://${aws_s3_bucket.layers["artifacts"].id}/historical_models/"
+  historical_models_uri = "s3://${aws_s3_bucket.layers["artifacts"].id}/${local.historical_models_prefix}"
 
   # The bucket is known at plan time, only the run id is not. Both templates bake
   # the literal into the single-quoted format string: States.Format accepts only
@@ -289,9 +295,8 @@ resource "aws_sfn_state_machine" "pipeline_orchestrator" {
         Parameters = {
           FunctionName = aws_lambda_function.select_model.arn
           Payload = {
-            "run_id.$"                 = "$.date_config.run_id"
-            "metrics_s3_uri.$"         = local.metrics_uri_template
-            "model_artifacts_s3_uri.$" = "$.training_result.ModelArtifacts.S3ModelArtifacts"
+            "run_id.$"         = "$.date_config.run_id"
+            "metrics_s3_uri.$" = local.metrics_uri_template
           }
         }
 

@@ -26,11 +26,21 @@ variable "environment" {
 
 # --- Email notifications ---
 variable "failure_notification_email" {
-  description = "Email address for pipeline alerts"
+  description = "Email address for pipeline alerts."
   type        = string
 
   validation {
     condition     = can(regex("^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$", var.failure_notification_email))
+    error_message = "Must be a valid email address."
+  }
+}
+
+variable "model_approval_email" {
+  description = "Email address that receives the model decision request after each training run."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$", var.model_approval_email))
     error_message = "Must be a valid email address."
   }
 }
@@ -82,6 +92,28 @@ variable "model_selection_metric" {
   }
 }
 
+variable "model_promotion_min_improvement" {
+  description = "Relative improvement on the selection metric a challenger must beat the retained model by before it is recommended for promotion. Without a band the pipeline promotes on noise and the retained set flips every month."
+  type        = number
+  default     = 0.01
+
+  validation {
+    condition     = var.model_promotion_min_improvement >= 0 && var.model_promotion_min_improvement < 1
+    error_message = "Must be a fraction between 0 (promote on any improvement) and 1 (never promote)."
+  }
+}
+
+variable "model_approval_link_ttl_days" {
+  description = "How many days the approve/reject link stays usable."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.model_approval_link_ttl_days >= 1 && var.model_approval_link_ttl_days <= 89
+    error_message = "Must be between 1 and 89 days: the candidate bundles in current_models/ are deleted after 90."
+  }
+}
+
 # --- Sagemaker configuration ---
 variable "sagemaker_instance_type" {
   description = "Sagemaker training instance type."
@@ -98,7 +130,7 @@ variable "sagemaker_volume_size_gb" {
 variable "sagemaker_max_runtime_seconds" {
   description = "Sagemaker StoppingCondition for the training job, in seconds. Also used as MaxWaitTimeInSeconds, which is what a spot interruption is allowed to add."
   type        = number
-  default     = 14400 # 4 hours
+  default     = 18000 # 5 hours
 }
 
 variable "sagemaker_sklearn_image_tag" {

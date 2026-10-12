@@ -55,7 +55,8 @@ resource "aws_s3_bucket_policy" "layers" {
 }
 
 resource "aws_s3_bucket_versioning" "layers" {
-  for_each = aws_s3_bucket.layers
+  # Do not create versioning for gold bucket
+  for_each = { for k, v in aws_s3_bucket.layers : k => v if k != "gold" }
 
   bucket = each.value.id # point to previous bucket
   versioning_configuration {
