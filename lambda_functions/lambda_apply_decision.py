@@ -291,13 +291,18 @@ def _confirm_body(pending, run_id, token):
     )
 
     return f"""
-<p>Run <code>{run_id}</code> &middot; metric <code>{pending.get("selection_metric")}</code>
-&middot; link expires {_fmt_expiry(pending.get("expires_at"))}</p>
+<p>Run <code>{run_id}</code> &middot; link expires {_fmt_expiry(pending.get("expires_at"))}</p>
 <p>Current and historical models were both scored on this run's validation window, so the
 numbers are directly comparable.</p>
 <div class="container">
 <table>
-<tr><th>horizon</th><th>retained</th><th>new best</th><th>improve</th><th>action</th></tr>
+<tr>
+<th>Horizon</th>
+<th>Retained model</th>
+<th>New best model"</th>
+<th>Improvement</th>
+<th>Action</th>
+</tr>
 {"".join(rows)}
 </table>
 <div class="buttons">{buttons}</div>
