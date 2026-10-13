@@ -80,7 +80,20 @@ resource "aws_lambda_function_url" "apply_decision" {
   invoke_mode        = "BUFFERED"
 }
 
+# AuthType NONE is not enough on its own.
+# This resource is needed for AuthType NONE to work properly.
+resource "aws_lambda_permission" "apply_decision_url_invoke" {
+  statement_id  = "FunctionURLInvokeAllowPublicAccess"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.apply_decision.function_name
+  principal     = "*"
+}
+
 output "model_approval_url" {
   description = "Public base URL used to build the approve/reject link in the email"
   value       = aws_lambda_function_url.apply_decision.function_url
+}
+
+output "lambda_apply_decision_name" {
+  value = aws_lambda_function.apply_decision.function_name
 }
