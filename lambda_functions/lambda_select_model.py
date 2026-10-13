@@ -208,6 +208,41 @@ def read_metrics(bucket, key):
     return list(csv.DictReader(io.StringIO(text)))
 
 
+def _build_ascii_table(headers, rows, alignments=None):
+    """Build a bordered, fixed-width ASCII table."""
+    if not rows:
+        return ""
+
+    alignments = alignments or ["left"] * len(headers)
+
+    # Calculate each column width from the header and cell contents
+    widths = [
+        max(len(str(headers[i])), *(len(str(row[i])) for row in rows)) for i in range(len(headers))
+    ]
+
+    def format_row(values):
+        cells = []
+        for i, value in enumerate(values):
+            value = str(value)
+            if alignments[i] == "right":
+                cells.append(value.rjust(widths[i]))
+            else:
+                cells.append(value.ljust(widths[i]))
+        return "| " + " | ".join(cells) + " |"
+
+    border = "+-" + "-+-".join("-" * w for w in widths) + "-+"
+
+    return "\n".join(
+        [
+            border,
+            format_row(headers),
+            border,
+            *(format_row(row) for row in rows),
+            border,
+        ]
+    )
+
+
 def build_email(pending, approval_url):
     """Render the plain-text SNS message and its subject."""
     horizons = pending["horizons"]
@@ -215,29 +250,42 @@ def build_email(pending, approval_url):
 
     subject = f"Models ready: replace {replace_count}/{len(horizons)} (run {pending['run_id']})"
 
-    lines = [
-        f"Run {pending['run_id']} finished.",
-        f"Metric: {pending['selection_metric']}",
-        "",
-        # "improve" not "delta": the number is (historical - current) / historical,
-        # so positive always means the new model is better. A header called "delta"
-        # reads as a change in WAPE, where positive would look like a regression.
-        f"{'horizon':<8} {'retained':<22} {'new best':<22} {'improve':>8}",
-    ]
+    table_rows = []
 
     for horizon, entry in sorted(horizons.items()):
         historical = entry["historical"]
         current = entry["current"]
+
         retained = (
-            f"{historical['model']} {_fmt(historical['valid_wape'])}" if historical else "(none)"
+            f"{historical['model']} ({_fmt(historical['valid_wape'])})" if historical else "(none)"
         )
-        lines.append(
-            f"{horizon:<8} {retained:<22} "
-            f"{current['model']} {_fmt(current['valid_wape']):<15} "
-            f"{_fmt_delta(entry['improvement']):>8}"
+        new_best = f"{current['model']} ({_fmt(current['valid_wape'])})" if current else "(none)"
+
+        table_rows.append(
+            [
+                horizon,
+                retained,
+                new_best,
+                _fmt_delta(entry["improvement"]),
+            ]
         )
 
-    lines += [
+    table = _build_ascii_table(
+        headers=[
+            "Horizon",
+            "Retained model",
+            "New best model",
+            "Improvement",
+        ],
+        rows=table_rows,
+        alignments=["left", "left", "left", "right"],
+    )
+
+    lines = [
+        f"Run {pending['run_id']} finished.",
+        f"Selection metric: {pending['selection_metric']}",
+        "",
+        table,
         "",
         f"Metrics: {pending['source_metrics']}",
         "",

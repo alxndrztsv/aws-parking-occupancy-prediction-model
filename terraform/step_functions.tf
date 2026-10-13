@@ -130,6 +130,7 @@ resource "aws_sfn_state_machine" "pipeline_orchestrator" {
 
         Parameters = {
           FunctionName = aws_lambda_function.fetch_data.arn
+          "Payload.$"  = "$"
         }
         ResultSelector = {
           "year.$"   = "$.Payload.year"
