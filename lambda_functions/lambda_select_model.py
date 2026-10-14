@@ -208,41 +208,6 @@ def read_metrics(bucket, key):
     return list(csv.DictReader(io.StringIO(text)))
 
 
-def _build_ascii_table(headers, rows, alignments=None):
-    """Build a bordered, fixed-width ASCII table."""
-    if not rows:
-        return ""
-
-    alignments = alignments or ["left"] * len(headers)
-
-    # Calculate each column width from the header and cell contents
-    widths = [
-        max(len(str(headers[i])), *(len(str(row[i])) for row in rows)) for i in range(len(headers))
-    ]
-
-    def format_row(values):
-        cells = []
-        for i, value in enumerate(values):
-            value = str(value)
-            if alignments[i] == "right":
-                cells.append(value.rjust(widths[i]))
-            else:
-                cells.append(value.ljust(widths[i]))
-        return "| " + " | ".join(cells) + " |"
-
-    border = "+-" + "-+-".join("-" * w for w in widths) + "-+"
-
-    return "\n".join(
-        [
-            border,
-            format_row(headers),
-            border,
-            *(format_row(row) for row in rows),
-            border,
-        ]
-    )
-
-
 def build_email(pending, approval_url):
     """Render the plain-text SNS message and its subject."""
     horizons = pending["horizons"]
@@ -250,43 +215,32 @@ def build_email(pending, approval_url):
 
     subject = f"Models ready: replace {replace_count}/{len(horizons)} (run {pending['run_id']})"
 
-    table_rows = []
+    lines = [
+        f"Run {pending['run_id']} finished.",
+        f"Selection metric: {pending['selection_metric']}, lower is better.",
+        f"Noise band: {pending['threshold'] * 100:.1f}% - a smaller gain counts as a tie.",
+        "",
+    ]
 
     for horizon, entry in sorted(horizons.items()):
-        historical = entry["historical"]
         current = entry["current"]
+        historical = entry["historical"]
+        verdict = "REPLACE" if entry["recommendation"] == "replace" else "keep"
 
+        new_best = f"{current['model']} ({_fmt(current['valid_wape'])})" if current else "(none)"
         retained = (
             f"{historical['model']} ({_fmt(historical['valid_wape'])})" if historical else "(none)"
         )
-        new_best = f"{current['model']} ({_fmt(current['valid_wape'])})" if current else "(none)"
 
-        table_rows.append(
-            [
-                horizon,
-                retained,
-                new_best,
-                _fmt_delta(entry["improvement"]),
-            ]
-        )
+        lines += [
+            horizon,
+            f"  new best: {new_best}",
+            f"  retained: {retained}",
+            f"  improvement: {_fmt_delta(entry['improvement'])} -> {verdict}",
+            "",
+        ]
 
-    table = _build_ascii_table(
-        headers=[
-            "Horizon",
-            "Retained model",
-            "New best model",
-            "Improvement",
-        ],
-        rows=table_rows,
-        alignments=["left", "left", "left", "right"],
-    )
-
-    lines = [
-        f"Run {pending['run_id']} finished.",
-        f"Selection metric: {pending['selection_metric']}",
-        "",
-        table,
-        "",
+    lines += [
         f"Metrics: {pending['source_metrics']}",
         "",
         "Nothing has been promoted. Production still serves the retained models.",
@@ -315,7 +269,8 @@ def _fmt_delta(value):
     try:
         return f"{float(value) * 100:+.1f}%"
     except (TypeError, ValueError):
-        return "?"
+        # improvement is None when there is no retained model to compare against
+        return "n/a"
 
 
 def lambda_handler(event, context):
