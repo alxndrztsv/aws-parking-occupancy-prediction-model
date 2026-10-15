@@ -308,7 +308,7 @@ def _pending(rows, run_id="run-1"):
     }
 
 
-def test_email_lists_every_horizon_with_its_improvement():
+def test_email_carries_the_summary_and_the_link():
     pending = _pending(
         [
             metric_row("lightgbm", "h1h", 0.0441, source="current"),
@@ -320,14 +320,21 @@ def test_email_lists_every_horizon_with_its_improvement():
 
     subject, message = sel.build_email(pending, APPROVAL_URL.rstrip("/"))
 
-    # The per-horizon recommendation lives on the confirmation page; the email
-    # carries the count in the subject and the improvement percentages in the table.
-    assert "replace 1/2" in subject
+    assert subject == "Parking occupancy models run: run-1"
     assert len(subject) <= 100, "SNS rejects a Subject longer than 100 characters"
-    assert "h1h" in message and "h2h" in message
-    assert "catboost" in message and "lightgbm" in message
-    assert "+4.5%" in message, "h1h: (0.0462 - 0.0441) / 0.0462"
-    assert "+0.4%" in message, "h2h is inside the noise band but still shown"
+
+    assert "Run run-1 finished." in message
+    # h1h clears the 1% band, h2h does not
+    assert "Replacement 1 out of 2 models recommended." in message
+    assert pending["source_metrics"] in message
+    assert "Nothing has been promoted" in message
+
+    # The per-horizon breakdown lives on the confirmation page, not in the email:
+    # SNS delivers text/plain and Gmail renders it proportionally, so a table there
+    # arrives crooked. Keep the email a summary.
+    assert "h1h" not in message
+    assert "lightgbm" not in message
+    assert "0.0441" not in message
 
     link = [ln.strip() for ln in message.splitlines() if ln.strip().startswith("https://")][0]
     query = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)
@@ -340,7 +347,8 @@ def test_email_explains_that_nothing_was_promoted_yet():
     )
 
     assert "Nothing has been promoted" in message
-    assert "Link expires 2026-11-09" in message
+    assert "Link expires 09 Nov 2026, 06:00 UTC" in message
+    assert "A newer run supersedes it" in message
 
 
 def test_a_long_run_id_cannot_produce_an_invalid_subject():

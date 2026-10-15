@@ -262,11 +262,15 @@ def _confirm_body(pending, run_id, token):
         historical = entry.get("historical") or {}
         verdict = entry.get("recommendation", "")
         mark = "REPLACE" if verdict == "replace" else "keep"
+        # "(none)" rather than a dash: that is what the email prints for the same
+        # case, and "- (no metrics)" reads like a rendering failure.
+        retained = f"{historical['model']} ({_fmt(historical)})" if historical else "(none)"
+        new_best = f"{current['model']} ({_fmt(current)})" if current else "(none)"
         rows.append(
             "<tr>"
             f"<td><b>{horizon}</b></td>"
-            f"<td>{historical.get('model', '-')} ({_fmt(historical)})</td>"
-            f"<td>{current.get('model', '-')} ({_fmt(current)})</td>"
+            f"<td>{retained}</td>"
+            f"<td>{new_best}</td>"
             f"<td>{_fmt_delta(entry.get('improvement'))}</td>"
             f"<td><b>{mark}</b></td>"
             "</tr>"
@@ -291,7 +295,9 @@ def _confirm_body(pending, run_id, token):
     )
 
     return f"""
-<p>Run <code>{run_id}</code> &middot; link expires {_fmt_expiry(pending.get("expires_at"))}</p>
+<p>Run <code>{run_id}</code>
+ &middot; noise band: <code>{(pending.get("threshold") or 0) * 100:.1f}%</code>
+ &middot; link expires {_fmt_expiry(pending.get("expires_at"))}</p>
 <p>Current and historical models were both scored on this run's validation window, so the
 numbers are directly comparable.</p>
 <div class="container">
@@ -299,7 +305,7 @@ numbers are directly comparable.</p>
 <tr>
 <th>Horizon</th>
 <th>Retained model</th>
-<th>New best model"</th>
+<th>New best model</th>
 <th>Improvement</th>
 <th>Action</th>
 </tr>
@@ -328,7 +334,9 @@ def _fmt_delta(value):
     try:
         return f"{float(value) * 100:+.1f}%"
     except (TypeError, ValueError):
-        return "?"
+        # improvement is None when there is no retained model to compare against.
+        # Same wording as the email, so the two never disagree.
+        return "n/a"
 
 
 CSS = """

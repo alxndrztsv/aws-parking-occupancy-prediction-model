@@ -143,6 +143,25 @@ def _candidate(row):
     }
 
 
+def _parse_timestamp(value):
+    try:
+        result = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if result.tzinfo is None or result.utcoffset() is None:
+            return None
+        return result
+    except (TypeError, ValueError):
+        return None
+
+
+def _fmt_expiry(value):
+    """Format the ISO timestamp into a clean, readable string."""
+    dt = _parse_timestamp(value)
+    if dt is None:
+        return "?"
+    # Outputs something like: "30 Nov 2026, 06:00 UTC"
+    return dt.strftime("%d %b %Y, %H:%M UTC")
+
+
 def build_decision(rows, metric=SELECTION_METRIC, threshold=PROMOTION_THRESHOLD):
     """
     Compare this run's best against the retained model, per horizon.
@@ -213,34 +232,13 @@ def build_email(pending, approval_url):
     horizons = pending["horizons"]
     replace_count = sum(1 for e in horizons.values() if e["recommendation"] == "replace")
 
-    subject = f"Models ready: replace {replace_count}/{len(horizons)} (run {pending['run_id']})"
+    subject = f"Parking occupancy models run: {pending['run_id']}"
 
     lines = [
         f"Run {pending['run_id']} finished.",
-        f"Selection metric: {pending['selection_metric']}, lower is better.",
-        f"Noise band: {pending['threshold'] * 100:.1f}% - a smaller gain counts as a tie.",
         "",
-    ]
-
-    for horizon, entry in sorted(horizons.items()):
-        current = entry["current"]
-        historical = entry["historical"]
-        verdict = "REPLACE" if entry["recommendation"] == "replace" else "keep"
-
-        new_best = f"{current['model']} ({_fmt(current['valid_wape'])})" if current else "(none)"
-        retained = (
-            f"{historical['model']} ({_fmt(historical['valid_wape'])})" if historical else "(none)"
-        )
-
-        lines += [
-            horizon,
-            f"  new best: {new_best}",
-            f"  retained: {retained}",
-            f"  improvement: {_fmt_delta(entry['improvement'])} -> {verdict}",
-            "",
-        ]
-
-    lines += [
+        f"Replacement {replace_count} out of {len(horizons)} models recommended.",
+        "",
         f"Metrics: {pending['source_metrics']}",
         "",
         "Nothing has been promoted. Production still serves the retained models.",
@@ -248,7 +246,7 @@ def build_email(pending, approval_url):
         "Review and decide (nothing changes until you submit):",
         f"  {approval_url}?{urllib.parse.urlencode(_link_query(pending))}",
         "",
-        f"Link expires {pending['expires_at']}. A newer run supersedes it.",
+        f"Link expires {_fmt_expiry(pending['expires_at'])}. A newer run supersedes it.",
     ]
 
     return subject[:100], "\n".join(lines)
@@ -256,21 +254,6 @@ def build_email(pending, approval_url):
 
 def _link_query(pending):
     return {"run_id": pending["run_id"], "token": pending["token"]}
-
-
-def _fmt(value):
-    try:
-        return f"{float(value):.4f}"
-    except (TypeError, ValueError):
-        return "?"
-
-
-def _fmt_delta(value):
-    try:
-        return f"{float(value) * 100:+.1f}%"
-    except (TypeError, ValueError):
-        # improvement is None when there is no retained model to compare against
-        return "n/a"
 
 
 def lambda_handler(event, context):

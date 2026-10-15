@@ -1,7 +1,7 @@
 # Environments
 .venv/
 
-# Secrets: never commit these
+# Secrets
 .env
 .env.*
 !.env.example
@@ -27,3 +27,4 @@ __pycache__/
 # Local artifacts
 dist/
 catboost_info/
+*.drawio
