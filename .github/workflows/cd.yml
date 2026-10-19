@@ -65,15 +65,21 @@ jobs:
         with:
           name: tfplan
           path: terraform/tfplan
+          if-no-files-found: error
 
       # archive_file builds the three Lambda zips during plan, and the provider
       # re-reads them from disk to upload at apply time. Applying a saved plan does
       # not re-run data sources, so the zips have to travel to the next runner.
+      # The directory must not start with a dot: upload-artifact globs with dot=false
+      # and silently skips hidden paths, which surfaces much later as
+      # "Artifact not found for name: lambda-zips" in the apply job.
+      # if-no-files-found: error makes an empty upload fail HERE instead.
       - name: Upload lambda packages
         uses: actions/upload-artifact@v4
         with:
           name: lambda-zips
-          path: terraform/.build
+          path: terraform/build
+          if-no-files-found: error
 
   apply:
     needs: plan
@@ -99,7 +105,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: lambda-zips
-          path: terraform/.build
+          path: terraform/build
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4

@@ -57,7 +57,7 @@ resource "aws_iam_role_policy" "lambda_fetch_data_policy" {
 data "archive_file" "lambda_fetch_data_zip" {
   type        = "zip"
   source_file = "${path.module}/../lambda_functions/lambda_fetch_data.py"
-  output_path = "${path.module}/.build/lambda_fetch_data.zip"
+  output_path = "${path.module}/build/lambda_fetch_data.zip"
 }
 
 resource "aws_lambda_function" "fetch_data" {

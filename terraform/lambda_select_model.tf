@@ -57,7 +57,7 @@ resource "aws_iam_role_policy" "lambda_select_model_policy" {
 data "archive_file" "lambda_select_model_zip" {
   type        = "zip"
   source_file = "${path.module}/../lambda_functions/lambda_select_model.py"
-  output_path = "${path.module}/.build/lambda_select_model.zip"
+  output_path = "${path.module}/build/lambda_select_model.zip"
 }
 
 resource "aws_lambda_function" "select_model" {
