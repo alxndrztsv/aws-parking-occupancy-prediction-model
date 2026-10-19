@@ -1,14 +1,10 @@
 name: CD
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
-    inputs:
-      apply:
-        description: "Run terraform apply (leave off for plan only)"
-        type: boolean
-        default: false
+  push:
+    branches:
+      - main
 
 permissions:
   id-token: write # OIDC federation with the bootstrap GitHub provider
@@ -19,7 +15,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Required variables
   TF_VAR_aws_region: ${{ vars.AWS_REGION }}
   TF_VAR_project_name: ${{ vars.TF_PROJECT_NAME }}
   TF_VAR_environment: ${{ vars.TF_ENVIRONMENT }}
@@ -31,66 +26,107 @@ env:
   TF_VAR_api_password: ${{ secrets.API_PASSWORD }}
 
 jobs:
-  deploy:
-    name: Deploy
+  plan:
     runs-on: ubuntu-latest
-    environment: production
-    defaults:
-      run:
-        shell: bash
+    environment: dev
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - uses: hashicorp/setup-terraform@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.16.4"
 
-      - name: terraform init
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Terraform init
         working-directory: terraform
-        run: terraform init -backend-config=backend.hcl -input=false
+        run: terraform init -input=false -backend-config=backend.hcl
 
-      # s3.tf names every bucket "${local.prefix}-${layer}", so the artifacts bucket
-      # is derivable without reading state - which matters on the very first run.
-      - name: Resolve artifacts bucket
-        id: bucket
-        run: echo "name=${TF_VAR_project_name}-${TF_VAR_environment}-artifacts" >> "$GITHUB_OUTPUT"
-
-      - name: terraform apply
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply }}
-        working-directory: terraform
-        run: terraform apply -auto-approve -input=false
-
-      - name: Build SageMaker training archive
-        run: bash scripts/build_sagemaker_package.sh dist/train.tar.gz
-
-      # Skipped rather than failed on the first run: the bucket does not exist until
-      # terraform apply above has created it.
-      - name: Upload training archive
-        run: |
-          BUCKET="${{ steps.bucket.outputs.name }}"
-          if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
-            aws s3 cp dist/train.tar.gz "s3://$BUCKET/code/train.tar.gz"
-            echo "Uploaded to s3://$BUCKET/code/train.tar.gz"
-          else
-            echo "::warning::$BUCKET does not exist yet. Re-run with apply=true."
-          fi
-
-      - name: terraform plan
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.apply) }}
+      - name: Terraform plan
         working-directory: terraform
         run: |
           terraform plan -input=false -no-color -out=tfplan
           {
             echo '### terraform plan'
             echo '```'
-            terraform show -no-color tfplan
+            terraform show -no-color tfplan | head -c 60000
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: terraform/tfplan
+
+      # archive_file builds the three Lambda zips during plan, and the provider
+      # re-reads them from disk to upload at apply time. Applying a saved plan does
+      # not re-run data sources, so the zips have to travel to the next runner.
+      - name: Upload lambda packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-zips
+          path: terraform/.build
+
+  apply:
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.4"
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: terraform
+
+      - name: Download lambda packages
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-zips
+          path: terraform/.build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Terraform init
+        working-directory: terraform
+        run: terraform init -input=false -backend-config=backend.hcl
+
+      - name: Terraform apply
+        working-directory: terraform
+        run: terraform apply -input=false tfplan
+
+      # Not a Terraform resource: the archive spans sagemaker/, src/ and configs/,
+      # which no single archive_file source_dir can express. Uploaded after apply
+      # because the bucket only exists once apply has created it.
+      - name: Build SageMaker training archive
+        run: bash scripts/build_sagemaker_package.sh dist/train.tar.gz
+
+      - name: Upload training archive
+        working-directory: terraform
+        run: |
+          BUCKET="$(terraform output -raw artifacts_bucket)"
+          aws s3 cp ../dist/train.tar.gz "s3://$BUCKET/code/train.tar.gz"
+          echo "Uploaded to s3://$BUCKET/code/train.tar.gz"
 
       - name: Show outputs
         working-directory: terraform

@@ -11,7 +11,6 @@ emails a comparison and waits for a human decision behind a signed link.
 
 ## What it predicts
 
-|           |                                                                                                                                                                                                             |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Target    | `occupancy_rate` = active sessions / total spaces, per terminal, per 10-minute bin                                                                                                                          |
 | Horizons  | `h1h`, `h2h`, `h3h`, `h24h` (60 / 120 / 180 / 1440 minutes ahead)                                                                                                                                           |
