@@ -142,7 +142,7 @@ variable "sagemaker_sklearn_image_tag" {
     "terraform output sagemaker_training_image" prints the resolved URI.
   EOT
   type        = string
-  default     = "1.4-2-cpu-py312"
+  default     = "1.4-2-py312"
 
   validation {
     condition     = can(regex("^[0-9]", var.sagemaker_sklearn_image_tag))
