@@ -142,7 +142,7 @@ resource "aws_sfn_state_machine" "pipeline_orchestrator" {
           {
             ErrorEquals     = ["States.ALL"]
             IntervalSeconds = 30
-            MaxAttempts     = 2
+            MaxAttempts     = 3
             BackoffRate     = 2.0
           }
         ]

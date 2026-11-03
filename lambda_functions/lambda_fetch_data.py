@@ -31,8 +31,42 @@ API_CITY_CODE = os.environ["API_CITY_CODE"]
 
 API_TIMEOUT_SECONDS = 60
 
+# The API answers 200 with a plain-text error body ("ACCESS DENIED") when the
+# credentials are rejected, so the status code proves nothing. Instead of
+# blacklisting error strings - the wording is theirs and can change - check the
+# positive contract: a transaction CSV must carry these columns. The same names
+# drive COLUMN_RENAME_MAP_RAW in glue_scripts/bronze_to_silver.py.
+EXPECTED_HEADER_COLUMNS = ("SYSTEM_ID", "METER_CODE", "METER_DATE")
+
 API_LOGIN_SSM_PATH = os.environ.get("API_LOGIN_SSM_PATH", "")
 API_PASSWORD_SSM_PATH = os.environ.get("API_PASSWORD_SSM_PATH", "")
+
+
+def validate_csv(csv_data: bytes) -> None:
+    """Reject a 200 response whose body is not a usable transaction CSV.
+
+    Runs before anything is written to S3, so a rejected response never poisons
+    the bronze layer for that month.
+    """
+    if not csv_data.strip():
+        raise RuntimeError("API returned HTTP 200 with an empty body")
+
+    first_line, _, rest = csv_data.partition(b"\n")
+    # utf-8-sig absorbs a BOM, which would otherwise glue itself to the first column
+    header = first_line.decode("utf-8-sig", errors="replace").strip()
+    columns = {c.strip().strip('"').upper() for c in header.split(",")}
+
+    missing = [c for c in EXPECTED_HEADER_COLUMNS if c not in columns]
+    if missing:
+        raise RuntimeError(
+            "API returned HTTP 200 but the body is not a transaction CSV "
+            f"(missing {', '.join(missing)}); first line was {header[:200]!r}"
+        )
+
+    if not rest.strip():
+        raise RuntimeError(
+            f"API returned HTTP 200 with a header but no data rows: {header[:200]!r}"
+        )
 
 
 def get_secrets():
@@ -119,7 +153,9 @@ def lambda_handler(event, context):
     try:
         with fetch_transactions(API_LOGIN, API_PASSWORD, start_date, end_date) as response:
             csv_data = response.read()
-            s3.put_object(Bucket=BRONZE_BUCKET, Key=s3_key, Body=csv_data)
+
+        validate_csv(csv_data)
+        s3.put_object(Bucket=BRONZE_BUCKET, Key=s3_key, Body=csv_data)
 
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:500]

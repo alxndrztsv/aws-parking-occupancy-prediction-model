@@ -21,3 +21,9 @@ os.environ.setdefault("AWS_DEFAULT_REGION", "eu-west-1")
 # lambda_apply_decision reads its bucket at import time, the way the Lambda
 # runtime provides it, so the value has to exist before the test module is imported.
 os.environ.setdefault("ARTIFACTS_BUCKET", "parking-ml-pipeline-dev-artifacts")
+
+# lambda_fetch_data does the same for its three required settings. The values are
+# placeholders: the tests exercise the pure helpers, never a real API call.
+os.environ.setdefault("BRONZE_BUCKET", "parking-ml-pipeline-dev-bronze")
+os.environ.setdefault("API_URL", "https://api.example.invalid/report")
+os.environ.setdefault("API_CITY_CODE", "DUBLIN")
